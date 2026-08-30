@@ -1,5 +1,6 @@
 import type { PropsWithChildren } from 'react';
 import { StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { palette, spacing, typography } from '../theme/theme';
@@ -13,24 +14,57 @@ export function ScreenShell({ title, children }: ScreenShellProps) {
   const colors = isDark ? palette.dark : palette.light;
 
   return (
-    <SafeAreaView
-      edges={['top', 'left', 'right']}
-      style={[styles.safeArea, { backgroundColor: colors.background }]}
-    >
-      <View style={styles.content}>
-        <Text
-          accessibilityRole="header"
-          style={[styles.title, { color: colors.text }]}
-        >
-          {title}
-        </Text>
-        {children}
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <LinearGradient
+        colors={colors.backgroundGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View
+          style={[
+            styles.glow,
+            styles.purpleGlow,
+            { backgroundColor: colors.glowPurple },
+          ]}
+        />
+        <View
+          style={[
+            styles.glow,
+            styles.pinkGlow,
+            { backgroundColor: colors.glowPink },
+          ]}
+        />
       </View>
-    </SafeAreaView>
+
+      <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
+        <View style={styles.content}>
+          <Text
+            accessibilityRole="header"
+            style={[
+              styles.title,
+              {
+                color: colors.text,
+                textShadowColor: colors.glowPurple,
+              },
+            ]}
+          >
+            {title}
+          </Text>
+          {children}
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    overflow: 'hidden',
+  },
   safeArea: {
     flex: 1,
   },
@@ -38,10 +72,28 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
-    paddingBottom: spacing.xxl,
+    paddingBottom: 124,
   },
   title: {
     ...typography.screenTitle,
     marginBottom: spacing.lg,
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 20,
+  },
+  glow: {
+    position: 'absolute',
+    borderRadius: 999,
+  },
+  purpleGlow: {
+    width: 300,
+    height: 300,
+    top: 54,
+    right: -156,
+  },
+  pinkGlow: {
+    width: 320,
+    height: 320,
+    bottom: 76,
+    left: -190,
   },
 });
