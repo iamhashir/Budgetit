@@ -35,7 +35,7 @@ export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTa
       pointerEvents="box-none"
       style={[styles.root, { paddingBottom: bottomInset }]}
     >
-      <View style={[styles.shadowWrap, { shadowColor: colors.primary }]}> 
+      <View style={[styles.shadowWrap, { shadowColor: colors.primary }]}>
         <LinearGradient
           colors={[colors.surfaceGlassStrong, colors.surfaceGlass]}
           start={{ x: 0.08, y: 0 }}
@@ -48,7 +48,13 @@ export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTa
           />
 
           {state.routes.map((route, index) => {
-            const { options } = descriptors[route.key];
+            const descriptor = descriptors[route.key];
+
+            if (!descriptor) {
+              return null;
+            }
+
+            const { options } = descriptor;
             const isFocused = state.index === index;
             const iconName = getIconName(route.name, isFocused);
             const labelColor = isFocused ? colors.activeText : colors.mutedText;
