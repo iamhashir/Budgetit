@@ -1,0 +1,92 @@
+name: Android Release APK
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    name: assembleRelease
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.1
+          package-manager-cache: false
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          sdkmanager \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;27.1.12297006"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run Expo Doctor
+        run: npx expo-doctor@latest
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Generate Android project
+        run: npx expo prebuild --clean --platform android --non-interactive
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build release APK
+        working-directory: android
+        shell: bash
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Verify release APK
+        shell: bash
+        run: |
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK"
+          mkdir -p artifacts
+          cp "$APK" artifacts/Budgetit-release.apk
+          ls -lh artifacts/Budgetit-release.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: Budgetit-release-apk
+          path: artifacts/Budgetit-release.apk
+          if-no-files-found: error
+          retention-days: 14
