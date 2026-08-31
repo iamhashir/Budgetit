@@ -2,7 +2,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   type LayoutChangeEvent,
@@ -26,6 +26,7 @@ import { palette, radii, typography } from '../theme/theme';
 
 const BAR_PADDING = 6;
 const DRAG_ACTIVE_OFFSET = 8;
+const RAPID_TAP_GUARD_MS = 320;
 
 const SNAP_SPRING = {
   damping: 17,
@@ -37,6 +38,12 @@ const TRAIL_SPRING = {
   damping: 22,
   stiffness: 150,
   mass: 0.95,
+} as const;
+
+const PRESS_RELEASE_SPRING = {
+  damping: 13,
+  stiffness: 360,
+  mass: 0.48,
 } as const;
 
 function clamp(value: number, min: number, max: number) {
@@ -63,10 +70,104 @@ function getIconName(routeName: string, focused: boolean) {
   }
 }
 
+type NavTabButtonProps = {
+  routeName: string;
+  isFocused: boolean;
+  iconName: ReturnType<typeof getIconName>;
+  labelColor: string;
+  inactiveIconBg: string;
+  activeDot: string;
+  accessibilityLabel: string;
+  reduceMotion: boolean;
+  onPress: () => void;
+  onLongPress: () => void;
+};
+
+function NavTabButton({
+  routeName,
+  isFocused,
+  iconName,
+  labelColor,
+  inactiveIconBg,
+  activeDot,
+  accessibilityLabel,
+  reduceMotion,
+  onPress,
+  onLongPress,
+}: NavTabButtonProps) {
+  const pressScale = useSharedValue(1);
+
+  const animatedPressStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pressScale.value }],
+  }));
+
+  const handlePressIn = () => {
+    cancelAnimation(pressScale);
+    pressScale.value = reduceMotion
+      ? 0.96
+      : withTiming(0.9, { duration: 72 });
+  };
+
+  const handlePressOut = () => {
+    cancelAnimation(pressScale);
+    pressScale.value = reduceMotion
+      ? 1
+      : withSpring(1, PRESS_RELEASE_SPRING);
+  };
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={isFocused ? { selected: true } : {}}
+      accessibilityLabel={accessibilityLabel}
+      hitSlop={4}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      style={styles.tabButton}
+    >
+      <Animated.View style={[styles.tabVisual, animatedPressStyle]}>
+        <View
+          style={[
+            styles.iconPod,
+            !isFocused && { backgroundColor: inactiveIconBg },
+          ]}
+        >
+          <SymbolView
+            name={iconName}
+            size={isFocused ? 25 : 22}
+            tintColor={labelColor}
+          />
+        </View>
+        <Text
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.35}
+          style={[styles.label, { color: labelColor }]}
+        >
+          {routeName}
+        </Text>
+        {isFocused ? (
+          <View
+            style={[
+              styles.activeDot,
+              {
+                backgroundColor: activeDot,
+                shadowColor: activeDot,
+              },
+            ]}
+          />
+        ) : null}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
 export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
   const isDark = useColorScheme() === 'dark';
   const colors = isDark ? palette.dark : palette.light;
   const [reduceMotion, setReduceMotion] = useState(false);
+  const lastAcceptedTapRef = useRef<{ index: number; at: number } | null>(null);
   const routeCount = state.routes.length;
   const maxIndex = Math.max(routeCount - 1, 0);
   const bottomInset = Math.max(insets.bottom, 8);
@@ -97,6 +198,8 @@ export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTa
   }, [reducedMotionShared]);
 
   useEffect(() => {
+    lastAcceptedTapRef.current = null;
+
     cancelAnimation(activePosition);
     cancelAnimation(trailPosition);
     cancelAnimation(scaleX);
@@ -131,10 +234,32 @@ export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTa
     trailPosition,
   ]);
 
+  const snapBubbleToIndex = (index: number) => {
+    if (reduceMotion) {
+      activePosition.value = index;
+      trailPosition.value = index;
+      return;
+    }
+
+    activePosition.value = withSpring(index, SNAP_SPRING);
+    trailPosition.value = withSpring(index, TRAIL_SPRING);
+  };
+
   const selectIndex = (index: number) => {
     const route = state.routes[index];
 
     if (!route) {
+      return;
+    }
+
+    const now = Date.now();
+    const lastTap = lastAcceptedTapRef.current;
+
+    if (
+      lastTap &&
+      lastTap.index === index &&
+      now - lastTap.at < RAPID_TAP_GUARD_MS
+    ) {
       return;
     }
 
@@ -145,6 +270,8 @@ export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTa
     });
 
     if (!event.defaultPrevented && index !== state.index) {
+      lastAcceptedTapRef.current = { index, at: now };
+      snapBubbleToIndex(index);
       void Haptics.selectionAsync();
       navigation.navigate(route.name, route.params);
     }
@@ -193,7 +320,7 @@ export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTa
 
   const panGesture = Gesture.Pan()
     .activeOffsetX([-DRAG_ACTIVE_OFFSET, DRAG_ACTIVE_OFFSET])
-    .onBegin(() => {
+    .onStart(() => {
       dragStartPosition.value = activePosition.value;
       cancelAnimation(activePosition);
       cancelAnimation(trailPosition);
@@ -275,7 +402,7 @@ export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTa
       pointerEvents="box-none"
       style={[styles.root, { paddingBottom: bottomInset }]}
     >
-      <View style={[styles.shadowWrap, { shadowColor: colors.navShadow }]}> 
+      <View style={[styles.shadowWrap, { shadowColor: colors.navShadow }]}>
         <LinearGradient
           colors={colors.navRimGradient}
           start={{ x: 0, y: 0 }}
@@ -373,50 +500,19 @@ export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTa
                   };
 
                   return (
-                    <Pressable
+                    <NavTabButton
                       key={route.key}
-                      accessibilityRole="button"
-                      accessibilityState={isFocused ? { selected: true } : {}}
+                      routeName={route.name}
+                      isFocused={isFocused}
+                      iconName={iconName}
+                      labelColor={labelColor}
+                      inactiveIconBg={colors.inactiveIconBg}
+                      activeDot={colors.activeDot}
                       accessibilityLabel={options.tabBarAccessibilityLabel ?? route.name}
-                      hitSlop={4}
+                      reduceMotion={reduceMotion}
                       onPress={() => selectIndex(index)}
                       onLongPress={onLongPress}
-                      style={({ pressed }) => [
-                        styles.tabButton,
-                        pressed && styles.pressed,
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.iconPod,
-                          !isFocused && { backgroundColor: colors.inactiveIconBg },
-                        ]}
-                      >
-                        <SymbolView
-                          name={iconName}
-                          size={isFocused ? 25 : 22}
-                          tintColor={labelColor}
-                        />
-                      </View>
-                      <Text
-                        numberOfLines={1}
-                        maxFontSizeMultiplier={1.35}
-                        style={[styles.label, { color: labelColor }]}
-                      >
-                        {route.name}
-                      </Text>
-                      {isFocused ? (
-                        <View
-                          style={[
-                            styles.activeDot,
-                            {
-                              backgroundColor: colors.activeDot,
-                              shadowColor: colors.activeDot,
-                            },
-                          ]}
-                        />
-                      ) : null}
-                    </Pressable>
+                    />
                   );
                 })}
               </View>
@@ -536,14 +632,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
     minHeight: 72,
     borderRadius: 27,
+  },
+  tabVisual: {
+    flex: 1,
+    width: '100%',
+    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
     paddingHorizontal: 5,
-  },
-  pressed: {
-    opacity: 0.78,
-    transform: [{ scale: 0.955 }],
   },
   iconPod: {
     width: 33,
