@@ -2,10 +2,9 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AccessibilityInfo,
-  Animated,
   type LayoutChangeEvent,
   Pressable,
   StyleSheet,
@@ -13,10 +12,37 @@ import {
   useColorScheme,
   View,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { palette, radii, typography } from '../theme/theme';
 
 const BAR_PADDING = 6;
+const DRAG_ACTIVE_OFFSET = 8;
+
+const SNAP_SPRING = {
+  damping: 17,
+  stiffness: 210,
+  mass: 0.82,
+} as const;
+
+const TRAIL_SPRING = {
+  damping: 22,
+  stiffness: 150,
+  mass: 0.95,
+} as const;
+
+function clamp(value: number, min: number, max: number) {
+  'worklet';
+  return Math.min(Math.max(value, min), max);
+}
 
 function getIconName(routeName: string, focused: boolean) {
   switch (routeName) {
@@ -40,83 +66,209 @@ function getIconName(routeName: string, focused: boolean) {
 export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
   const isDark = useColorScheme() === 'dark';
   const colors = isDark ? palette.dark : palette.light;
-  const [barWidth, setBarWidth] = useState(0);
   const [reduceMotion, setReduceMotion] = useState(false);
-  const activePosition = useRef(new Animated.Value(state.index)).current;
-  const trailPosition = useRef(new Animated.Value(state.index)).current;
-  const bubbleScale = useRef(new Animated.Value(1)).current;
+  const routeCount = state.routes.length;
+  const maxIndex = Math.max(routeCount - 1, 0);
   const bottomInset = Math.max(insets.bottom, 8);
-  const itemWidth =
-    barWidth > BAR_PADDING * 2
-      ? (barWidth - BAR_PADDING * 2) / state.routes.length
-      : 0;
+
+  const itemWidth = useSharedValue(0);
+  const activePosition = useSharedValue(state.index);
+  const trailPosition = useSharedValue(state.index);
+  const dragStartPosition = useSharedValue(state.index);
+  const scaleX = useSharedValue(1);
+  const scaleY = useSharedValue(1);
+  const liftY = useSharedValue(0);
+  const tilt = useSharedValue(0);
+  const reducedMotionShared = useSharedValue(false);
 
   useEffect(() => {
-    void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
+    const applyReduceMotion = (enabled: boolean) => {
+      setReduceMotion(enabled);
+      reducedMotionShared.value = enabled;
+    };
+
+    void AccessibilityInfo.isReduceMotionEnabled().then(applyReduceMotion);
     const subscription = AccessibilityInfo.addEventListener(
       'reduceMotionChanged',
-      setReduceMotion,
+      applyReduceMotion,
     );
 
     return () => subscription.remove();
-  }, []);
+  }, [reducedMotionShared]);
 
   useEffect(() => {
+    cancelAnimation(activePosition);
+    cancelAnimation(trailPosition);
+    cancelAnimation(scaleX);
+    cancelAnimation(scaleY);
+    cancelAnimation(liftY);
+    cancelAnimation(tilt);
+
     if (reduceMotion) {
-      activePosition.setValue(state.index);
-      trailPosition.setValue(state.index);
-      bubbleScale.setValue(1);
+      activePosition.value = state.index;
+      trailPosition.value = state.index;
+      scaleX.value = 1;
+      scaleY.value = 1;
+      liftY.value = 0;
+      tilt.value = 0;
       return;
     }
 
-    activePosition.stopAnimation();
-    trailPosition.stopAnimation();
-    bubbleScale.stopAnimation();
+    activePosition.value = withSpring(state.index, SNAP_SPRING);
+    trailPosition.value = withSpring(state.index, TRAIL_SPRING);
+    scaleX.value = withSpring(1, SNAP_SPRING);
+    scaleY.value = withSpring(1, SNAP_SPRING);
+    liftY.value = withSpring(0, SNAP_SPRING);
+    tilt.value = withSpring(0, SNAP_SPRING);
+  }, [
+    activePosition,
+    liftY,
+    reduceMotion,
+    scaleX,
+    scaleY,
+    state.index,
+    tilt,
+    trailPosition,
+  ]);
 
-    Animated.parallel([
-      Animated.spring(activePosition, {
-        toValue: state.index,
-        tension: 145,
-        friction: 12,
-        useNativeDriver: true,
-      }),
-      Animated.sequence([
-        Animated.delay(45),
-        Animated.spring(trailPosition, {
-          toValue: state.index,
-          tension: 82,
-          friction: 15,
-          useNativeDriver: true,
-        }),
-      ]),
-      Animated.sequence([
-        Animated.timing(bubbleScale, {
-          toValue: 0.965,
-          duration: 75,
-          useNativeDriver: true,
-        }),
-        Animated.spring(bubbleScale, {
-          toValue: 1,
-          speed: 22,
-          bounciness: 8,
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start();
-  }, [activePosition, bubbleScale, reduceMotion, state.index, trailPosition]);
+  const selectIndex = (index: number) => {
+    const route = state.routes[index];
 
-  const handleLayout = (event: LayoutChangeEvent) => {
-    const nextWidth = event.nativeEvent.layout.width;
+    if (!route) {
+      return;
+    }
 
-    if (Math.abs(nextWidth - barWidth) > 0.5) {
-      setBarWidth(nextWidth);
+    const event = navigation.emit({
+      type: 'tabPress',
+      target: route.key,
+      canPreventDefault: true,
+    });
+
+    if (!event.defaultPrevented && index !== state.index) {
+      void Haptics.selectionAsync();
+      navigation.navigate(route.name, route.params);
     }
   };
 
-  const inputRange = state.routes.map((_, index) => index);
-  const outputRange = state.routes.map((_, index) => index * itemWidth);
-  const activeTranslateX = activePosition.interpolate({ inputRange, outputRange });
-  const trailTranslateX = trailPosition.interpolate({ inputRange, outputRange });
+  const handleLayout = (event: LayoutChangeEvent) => {
+    const availableWidth = Math.max(
+      event.nativeEvent.layout.width - BAR_PADDING * 2,
+      0,
+    );
+    itemWidth.value = routeCount > 0 ? availableWidth / routeCount : 0;
+  };
+
+  const bubbleAnimatedStyle = useAnimatedStyle(() => ({
+    width: itemWidth.value,
+    transform: [
+      { translateX: activePosition.value * itemWidth.value },
+      { translateY: liftY.value },
+      { scaleX: scaleX.value },
+      { scaleY: scaleY.value },
+      { rotateZ: `${tilt.value}deg` },
+    ],
+  }));
+
+  const trailAnimatedStyle = useAnimatedStyle(() => {
+    const separation = Math.abs(activePosition.value - trailPosition.value);
+
+    return {
+      left: BAR_PADDING + itemWidth.value * 0.13,
+      width: itemWidth.value * 0.74,
+      opacity: itemWidth.value > 0 ? 0.86 : 0,
+      transform: [
+        { translateX: trailPosition.value * itemWidth.value },
+        { scaleX: 1 + Math.min(separation * 0.9, 0.32) },
+      ],
+    };
+  });
+
+  const bubbleGlowAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: tilt.value * 1.8 },
+      { translateY: -liftY.value * 0.7 },
+      { scale: 1 + Math.abs(scaleX.value - 1) * 2.2 },
+    ],
+  }));
+
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-DRAG_ACTIVE_OFFSET, DRAG_ACTIVE_OFFSET])
+    .onBegin(() => {
+      dragStartPosition.value = activePosition.value;
+      cancelAnimation(activePosition);
+      cancelAnimation(trailPosition);
+
+      if (!reducedMotionShared.value) {
+        liftY.value = withTiming(-3, { duration: 90 });
+        scaleY.value = withTiming(1.035, { duration: 90 });
+      }
+    })
+    .onUpdate((event) => {
+      const width = itemWidth.value;
+
+      if (width <= 0) {
+        return;
+      }
+
+      const nextPosition = clamp(
+        dragStartPosition.value + event.translationX / width,
+        0,
+        maxIndex,
+      );
+      const velocityStrength = clamp(Math.abs(event.velocityX) / 1800, 0, 1);
+      const direction = event.velocityX === 0 ? 0 : event.velocityX > 0 ? 1 : -1;
+
+      activePosition.value = nextPosition;
+      trailPosition.value = clamp(
+        nextPosition - direction * (0.055 + velocityStrength * 0.1),
+        0,
+        maxIndex,
+      );
+
+      if (!reducedMotionShared.value) {
+        scaleX.value = 1 + velocityStrength * 0.12;
+        scaleY.value = 1 - velocityStrength * 0.055;
+        tilt.value = direction * velocityStrength * 2.4;
+      }
+    })
+    .onEnd((event) => {
+      const width = itemWidth.value;
+
+      if (width <= 0) {
+        return;
+      }
+
+      const velocityProjection = (event.velocityX / width) * 0.11;
+      const targetIndex = Math.round(
+        clamp(activePosition.value + velocityProjection, 0, maxIndex),
+      );
+
+      if (reducedMotionShared.value) {
+        activePosition.value = targetIndex;
+        trailPosition.value = targetIndex;
+        scaleX.value = 1;
+        scaleY.value = 1;
+        liftY.value = 0;
+        tilt.value = 0;
+      } else {
+        activePosition.value = withSpring(targetIndex, SNAP_SPRING);
+        trailPosition.value = withSpring(targetIndex, TRAIL_SPRING);
+        scaleX.value = withSpring(1, SNAP_SPRING);
+        scaleY.value = withSpring(1, SNAP_SPRING);
+        liftY.value = withSpring(0, SNAP_SPRING);
+        tilt.value = withSpring(0, SNAP_SPRING);
+      }
+
+      scheduleOnRN(selectIndex, targetIndex);
+    })
+    .onFinalize(() => {
+      if (!reducedMotionShared.value) {
+        scaleX.value = withSpring(1, SNAP_SPRING);
+        scaleY.value = withSpring(1, SNAP_SPRING);
+        liftY.value = withSpring(0, SNAP_SPRING);
+        tilt.value = withSpring(0, SNAP_SPRING);
+      }
+    });
 
   return (
     <View
@@ -130,174 +282,146 @@ export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTa
           end={{ x: 1, y: 1 }}
           style={styles.rim}
         >
-          <View style={styles.innerClip} onLayout={handleLayout}>
-            <LinearGradient
-              colors={colors.navInnerGradient}
-              start={{ x: 0.05, y: 0 }}
-              end={{ x: 0.95, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
+          <GestureDetector gesture={panGesture}>
+            <View style={styles.innerClip} onLayout={handleLayout}>
+              <LinearGradient
+                colors={colors.navInnerGradient}
+                start={{ x: 0.05, y: 0 }}
+                end={{ x: 0.95, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
 
-            <View
-              pointerEvents="none"
-              style={[styles.topGlassLine, { backgroundColor: colors.bubbleHighlight }]}
-            />
-            <View
-              pointerEvents="none"
-              style={[styles.leftGlassOrb, { backgroundColor: colors.glowPurple }]}
-            />
-            <View
-              pointerEvents="none"
-              style={[styles.rightGlassOrb, { backgroundColor: colors.glowPink }]}
-            />
+              <View
+                pointerEvents="none"
+                style={[styles.topGlassLine, { backgroundColor: colors.bubbleHighlight }]}
+              />
+              <View
+                pointerEvents="none"
+                style={[styles.leftGlassOrb, { backgroundColor: colors.glowPurple }]}
+              />
+              <View
+                pointerEvents="none"
+                style={[styles.rightGlassOrb, { backgroundColor: colors.glowPink }]}
+              />
 
-            {itemWidth > 0 ? (
-              <>
-                <Animated.View
-                  pointerEvents="none"
-                  style={[
-                    styles.trail,
-                    {
-                      left: BAR_PADDING + itemWidth * 0.14,
-                      width: itemWidth * 0.72,
-                      transform: [{ translateX: trailTranslateX }],
-                    },
-                  ]}
+              <Animated.View
+                pointerEvents="none"
+                style={[styles.trail, trailAnimatedStyle]}
+              >
+                <LinearGradient
+                  colors={colors.trailGradient}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={StyleSheet.absoluteFill}
+                />
+              </Animated.View>
+
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.activeBubbleShadow,
+                  { shadowColor: colors.bubbleShadow },
+                  bubbleAnimatedStyle,
+                ]}
+              >
+                <LinearGradient
+                  colors={colors.bubbleGradient}
+                  start={{ x: 0.04, y: 0 }}
+                  end={{ x: 0.96, y: 1 }}
+                  style={styles.activeBubble}
                 >
-                  <LinearGradient
-                    colors={colors.trailGradient}
-                    start={{ x: 0, y: 0.5 }}
-                    end={{ x: 1, y: 0.5 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                </Animated.View>
-
-                <Animated.View
-                  pointerEvents="none"
-                  style={[
-                    styles.activeBubbleShadow,
-                    {
-                      left: BAR_PADDING,
-                      width: itemWidth,
-                      shadowColor: colors.bubbleShadow,
-                      transform: [
-                        { translateX: activeTranslateX },
-                        { scale: bubbleScale },
-                      ],
-                    },
-                  ]}
-                >
-                  <LinearGradient
-                    colors={colors.bubbleGradient}
-                    start={{ x: 0.04, y: 0 }}
-                    end={{ x: 0.96, y: 1 }}
-                    style={styles.activeBubble}
-                  >
-                    <View
-                      style={[
-                        styles.bubbleRim,
-                        { borderColor: colors.bubbleHighlight },
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.bubbleSpecular,
-                        { backgroundColor: colors.bubbleHighlight },
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.bubbleGlow,
-                        { backgroundColor: colors.glowPink },
-                      ]}
-                    />
-                  </LinearGradient>
-                </Animated.View>
-              </>
-            ) : null}
-
-            <View style={styles.tabRow}>
-              {state.routes.map((route, index) => {
-                const descriptor = descriptors[route.key];
-
-                if (!descriptor) {
-                  return null;
-                }
-
-                const { options } = descriptor;
-                const isFocused = state.index === index;
-                const iconName = getIconName(route.name, isFocused);
-                const labelColor = isFocused ? colors.activeText : colors.mutedText;
-
-                const onPress = () => {
-                  const event = navigation.emit({
-                    type: 'tabPress',
-                    target: route.key,
-                    canPreventDefault: true,
-                  });
-
-                  if (!isFocused && !event.defaultPrevented) {
-                    void Haptics.selectionAsync();
-                    navigation.navigate(route.name, route.params);
-                  }
-                };
-
-                const onLongPress = () => {
-                  navigation.emit({
-                    type: 'tabLongPress',
-                    target: route.key,
-                  });
-                };
-
-                return (
-                  <Pressable
-                    key={route.key}
-                    accessibilityRole="button"
-                    accessibilityState={isFocused ? { selected: true } : {}}
-                    accessibilityLabel={options.tabBarAccessibilityLabel ?? route.name}
-                    hitSlop={4}
-                    onPress={onPress}
-                    onLongPress={onLongPress}
-                    style={({ pressed }) => [
-                      styles.tabButton,
-                      pressed && styles.pressed,
+                  <View
+                    style={[
+                      styles.bubbleRim,
+                      { borderColor: colors.bubbleHighlight },
                     ]}
-                  >
-                    <View
-                      style={[
-                        styles.iconPod,
-                        !isFocused && { backgroundColor: colors.inactiveIconBg },
+                  />
+                  <View
+                    style={[
+                      styles.bubbleSpecular,
+                      { backgroundColor: colors.bubbleHighlight },
+                    ]}
+                  />
+                  <Animated.View
+                    style={[
+                      styles.bubbleGlow,
+                      { backgroundColor: colors.glowPink },
+                      bubbleGlowAnimatedStyle,
+                    ]}
+                  />
+                </LinearGradient>
+              </Animated.View>
+
+              <View style={styles.tabRow}>
+                {state.routes.map((route, index) => {
+                  const descriptor = descriptors[route.key];
+
+                  if (!descriptor) {
+                    return null;
+                  }
+
+                  const { options } = descriptor;
+                  const isFocused = state.index === index;
+                  const iconName = getIconName(route.name, isFocused);
+                  const labelColor = isFocused ? colors.activeText : colors.mutedText;
+
+                  const onLongPress = () => {
+                    navigation.emit({
+                      type: 'tabLongPress',
+                      target: route.key,
+                    });
+                  };
+
+                  return (
+                    <Pressable
+                      key={route.key}
+                      accessibilityRole="button"
+                      accessibilityState={isFocused ? { selected: true } : {}}
+                      accessibilityLabel={options.tabBarAccessibilityLabel ?? route.name}
+                      hitSlop={4}
+                      onPress={() => selectIndex(index)}
+                      onLongPress={onLongPress}
+                      style={({ pressed }) => [
+                        styles.tabButton,
+                        pressed && styles.pressed,
                       ]}
                     >
-                      <SymbolView
-                        name={iconName}
-                        size={isFocused ? 25 : 22}
-                        tintColor={labelColor}
-                      />
-                    </View>
-                    <Text
-                      numberOfLines={1}
-                      maxFontSizeMultiplier={1.35}
-                      style={[styles.label, { color: labelColor }]}
-                    >
-                      {route.name}
-                    </Text>
-                    {isFocused ? (
                       <View
                         style={[
-                          styles.activeDot,
-                          {
-                            backgroundColor: colors.activeDot,
-                            shadowColor: colors.activeDot,
-                          },
+                          styles.iconPod,
+                          !isFocused && { backgroundColor: colors.inactiveIconBg },
                         ]}
-                      />
-                    ) : null}
-                  </Pressable>
-                );
-              })}
+                      >
+                        <SymbolView
+                          name={iconName}
+                          size={isFocused ? 25 : 22}
+                          tintColor={labelColor}
+                        />
+                      </View>
+                      <Text
+                        numberOfLines={1}
+                        maxFontSizeMultiplier={1.35}
+                        style={[styles.label, { color: labelColor }]}
+                      >
+                        {route.name}
+                      </Text>
+                      {isFocused ? (
+                        <View
+                          style={[
+                            styles.activeDot,
+                            {
+                              backgroundColor: colors.activeDot,
+                              shadowColor: colors.activeDot,
+                            },
+                          ]}
+                        />
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
-          </View>
+          </GestureDetector>
         </LinearGradient>
       </View>
     </View>
@@ -363,6 +487,7 @@ const styles = StyleSheet.create({
   },
   activeBubbleShadow: {
     position: 'absolute',
+    left: BAR_PADDING,
     top: BAR_PADDING,
     bottom: BAR_PADDING,
     borderRadius: 27,
