@@ -75,10 +75,10 @@ type NavTabButtonProps = {
   isFocused: boolean;
   iconName: ReturnType<typeof getIconName>;
   labelColor: string;
-  inactiveIconBg: string;
   activeDot: string;
   accessibilityLabel: string;
-  reduceMotion: boolean;
+  onPressIn: () => void;
+  onPressOut: () => void;
   onPress: () => void;
   onLongPress: () => void;
 };
@@ -88,55 +88,30 @@ function NavTabButton({
   isFocused,
   iconName,
   labelColor,
-  inactiveIconBg,
   activeDot,
   accessibilityLabel,
-  reduceMotion,
+  onPressIn,
+  onPressOut,
   onPress,
   onLongPress,
 }: NavTabButtonProps) {
-  const pressScale = useSharedValue(1);
-
-  const animatedPressStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pressScale.value }],
-  }));
-
-  const handlePressIn = () => {
-    cancelAnimation(pressScale);
-    pressScale.value = reduceMotion
-      ? 0.96
-      : withTiming(0.9, { duration: 72 });
-  };
-
-  const handlePressOut = () => {
-    cancelAnimation(pressScale);
-    pressScale.value = reduceMotion
-      ? 1
-      : withSpring(1, PRESS_RELEASE_SPRING);
-  };
-
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={isFocused ? { selected: true } : {}}
       accessibilityLabel={accessibilityLabel}
       hitSlop={4}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
       onPress={onPress}
       onLongPress={onLongPress}
       style={styles.tabButton}
     >
-      <Animated.View style={[styles.tabVisual, animatedPressStyle]}>
-        <View
-          style={[
-            styles.iconPod,
-            !isFocused && { backgroundColor: inactiveIconBg },
-          ]}
-        >
+      <View style={styles.tabVisual}>
+        <View style={styles.iconSlot}>
           <SymbolView
             name={iconName}
-            size={isFocused ? 25 : 22}
+            size={isFocused ? 26 : 23}
             tintColor={labelColor}
           />
         </View>
@@ -158,7 +133,7 @@ function NavTabButton({
             ]}
           />
         ) : null}
-      </Animated.View>
+      </View>
     </Pressable>
   );
 }
@@ -180,6 +155,9 @@ export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTa
   const scaleY = useSharedValue(1);
   const liftY = useSharedValue(0);
   const tilt = useSharedValue(0);
+  const bubblePressScale = useSharedValue(1);
+  const splashScale = useSharedValue(0.18);
+  const splashOpacity = useSharedValue(0);
   const reducedMotionShared = useSharedValue(false);
 
   useEffect(() => {
@@ -245,6 +223,31 @@ export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTa
     trailPosition.value = withSpring(index, TRAIL_SPRING);
   };
 
+  const animateBubblePressIn = () => {
+    cancelAnimation(bubblePressScale);
+    cancelAnimation(splashScale);
+    cancelAnimation(splashOpacity);
+
+    if (reduceMotion) {
+      bubblePressScale.value = 0.96;
+      splashOpacity.value = 0;
+      return;
+    }
+
+    bubblePressScale.value = withTiming(0.91, { duration: 76 });
+    splashScale.value = 0.18;
+    splashOpacity.value = 0.62;
+    splashScale.value = withTiming(1.55, { duration: 340 });
+    splashOpacity.value = withTiming(0, { duration: 390 });
+  };
+
+  const animateBubblePressOut = () => {
+    cancelAnimation(bubblePressScale);
+    bubblePressScale.value = reduceMotion
+      ? 1
+      : withSpring(1, PRESS_RELEASE_SPRING);
+  };
+
   const selectIndex = (index: number) => {
     const route = state.routes[index];
 
@@ -290,6 +293,7 @@ export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTa
     transform: [
       { translateX: activePosition.value * itemWidth.value },
       { translateY: liftY.value },
+      { scale: bubblePressScale.value },
       { scaleX: scaleX.value },
       { scaleY: scaleY.value },
       { rotateZ: `${tilt.value}deg` },
@@ -318,12 +322,24 @@ export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTa
     ],
   }));
 
+  const splashAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: splashOpacity.value,
+    transform: [{ scale: splashScale.value }],
+  }));
+
+  const splashRingAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: splashOpacity.value * 0.82,
+    transform: [{ scale: splashScale.value * 1.18 }],
+  }));
+
   const panGesture = Gesture.Pan()
     .activeOffsetX([-DRAG_ACTIVE_OFFSET, DRAG_ACTIVE_OFFSET])
     .onStart(() => {
       dragStartPosition.value = activePosition.value;
       cancelAnimation(activePosition);
       cancelAnimation(trailPosition);
+      cancelAnimation(bubblePressScale);
+      bubblePressScale.value = 1;
 
       if (!reducedMotionShared.value) {
         liftY.value = withTiming(-3, { duration: 90 });
@@ -476,6 +492,20 @@ export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTa
                       bubbleGlowAnimatedStyle,
                     ]}
                   />
+                  <Animated.View
+                    style={[
+                      styles.splashFill,
+                      { backgroundColor: colors.bubbleHighlight },
+                      splashAnimatedStyle,
+                    ]}
+                  />
+                  <Animated.View
+                    style={[
+                      styles.splashRing,
+                      { borderColor: colors.activeDot },
+                      splashRingAnimatedStyle,
+                    ]}
+                  />
                 </LinearGradient>
               </Animated.View>
 
@@ -506,10 +536,10 @@ export function GlassTabBar({ state, descriptors, navigation, insets }: BottomTa
                       isFocused={isFocused}
                       iconName={iconName}
                       labelColor={labelColor}
-                      inactiveIconBg={colors.inactiveIconBg}
                       activeDot={colors.activeDot}
                       accessibilityLabel={options.tabBarAccessibilityLabel ?? route.name}
-                      reduceMotion={reduceMotion}
+                      onPressIn={animateBubblePressIn}
+                      onPressOut={animateBubblePressOut}
                       onPress={() => selectIndex(index)}
                       onLongPress={onLongPress}
                     />
@@ -621,6 +651,23 @@ const styles = StyleSheet.create({
     bottom: -32,
     opacity: 0.82,
   },
+  splashFill: {
+    position: 'absolute',
+    width: 82,
+    height: 82,
+    borderRadius: radii.pill,
+    alignSelf: 'center',
+    top: -2,
+  },
+  splashRing: {
+    position: 'absolute',
+    width: 72,
+    height: 72,
+    borderRadius: radii.pill,
+    borderWidth: 1.5,
+    alignSelf: 'center',
+    top: 3,
+  },
   tabRow: {
     flex: 1,
     flexDirection: 'row',
@@ -642,10 +689,9 @@ const styles = StyleSheet.create({
     gap: 2,
     paddingHorizontal: 5,
   },
-  iconPod: {
+  iconSlot: {
     width: 33,
     height: 33,
-    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },
