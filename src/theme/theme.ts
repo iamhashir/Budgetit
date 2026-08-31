@@ -19,6 +19,22 @@ export const palette = {
     glowPink: 'rgba(230, 87, 157, 0.14)',
     bubbleGradient: ['#9F4CC7', '#D455A0'] as const,
     bubbleHighlight: 'rgba(255, 255, 255, 0.24)',
+    navRimGradient: [
+      'rgba(255, 255, 255, 0.96)',
+      'rgba(183, 88, 195, 0.56)',
+      'rgba(225, 91, 157, 0.62)',
+      'rgba(255, 255, 255, 0.88)',
+    ] as const,
+    navInnerGradient: [
+      'rgba(255, 255, 255, 0.88)',
+      'rgba(252, 243, 255, 0.78)',
+      'rgba(255, 240, 248, 0.80)',
+    ] as const,
+    navShadow: 'rgba(113, 45, 129, 0.34)',
+    bubbleShadow: 'rgba(188, 69, 166, 0.48)',
+    trailGradient: ['rgba(159, 76, 199, 0.22)', 'rgba(218, 83, 160, 0.06)'] as const,
+    inactiveIconBg: 'rgba(139, 73, 149, 0.08)',
+    activeDot: '#FFF4FB',
   },
   dark: {
     background: '#1A111C',
@@ -38,6 +54,22 @@ export const palette = {
     glowPink: 'rgba(230, 77, 150, 0.18)',
     bubbleGradient: ['#A64FD1', '#E15B9F'] as const,
     bubbleHighlight: 'rgba(255, 255, 255, 0.20)',
+    navRimGradient: [
+      'rgba(255, 224, 253, 0.28)',
+      'rgba(174, 78, 205, 0.64)',
+      'rgba(232, 89, 163, 0.64)',
+      'rgba(255, 221, 248, 0.20)',
+    ] as const,
+    navInnerGradient: [
+      'rgba(54, 31, 59, 0.94)',
+      'rgba(43, 24, 49, 0.92)',
+      'rgba(51, 24, 45, 0.94)',
+    ] as const,
+    navShadow: 'rgba(0, 0, 0, 0.52)',
+    bubbleShadow: 'rgba(213, 83, 186, 0.52)',
+    trailGradient: ['rgba(170, 79, 211, 0.30)', 'rgba(225, 91, 159, 0.08)'] as const,
+    inactiveIconBg: 'rgba(255, 220, 250, 0.07)',
+    activeDot: '#FFF1FB',
   },
 } as const;
 
