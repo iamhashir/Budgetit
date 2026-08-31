@@ -1,17 +1,21 @@
 import type { PropsWithChildren } from 'react';
-import { StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { palette, radii, spacing, typography } from '../theme/theme';
+import {
+  components,
+  radii,
+  typography,
+  useDesignSystem,
+} from '../theme';
 
 type ScreenShellProps = PropsWithChildren<{
   title: string;
 }>;
 
 export function ScreenShell({ title, children }: ScreenShellProps) {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? palette.dark : palette.light;
+  const { colors } = useDesignSystem();
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -113,6 +117,9 @@ export function ScreenShell({ title, children }: ScreenShellProps) {
   );
 }
 
+const screen = components.screen;
+const header = components.header;
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
@@ -123,30 +130,30 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 124,
+    paddingHorizontal: screen.horizontalPadding,
+    paddingTop: screen.topPadding,
+    paddingBottom: screen.bottomContentInset,
   },
   headerShadow: {
-    borderRadius: 31,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.24,
-    shadowRadius: 24,
-    elevation: 10,
+    borderRadius: header.radius,
+    shadowOffset: { width: 0, height: header.shadow.y },
+    shadowOpacity: header.shadow.opacity,
+    shadowRadius: header.shadow.radius,
+    elevation: header.shadow.elevation,
   },
   headerRim: {
-    minHeight: 98,
-    borderRadius: 31,
-    padding: 1.4,
+    minHeight: header.minimumHeight,
+    borderRadius: header.radius,
+    padding: header.rimWidth,
   },
   headerInner: {
     flex: 1,
-    minHeight: 95,
-    borderRadius: 29.6,
+    minHeight: header.innerMinimumHeight,
+    borderRadius: header.innerRadius,
     overflow: 'hidden',
     justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingHorizontal: header.horizontalPadding,
+    paddingVertical: header.verticalPadding,
   },
   title: {
     ...typography.screenTitle,
@@ -154,54 +161,54 @@ const styles = StyleSheet.create({
     textShadowRadius: 18,
   },
   headerAccent: {
-    width: 58,
-    height: 4,
+    width: header.accentWidth,
+    height: header.accentHeight,
     borderRadius: radii.pill,
-    marginTop: 10,
+    marginTop: header.accentTopSpacing,
   },
   headerPurpleOrb: {
     position: 'absolute',
-    width: 128,
-    height: 128,
+    width: header.purpleOrb.size,
+    height: header.purpleOrb.size,
     borderRadius: radii.pill,
-    right: -42,
-    top: -64,
+    right: header.purpleOrb.right,
+    top: header.purpleOrb.top,
   },
   headerPinkOrb: {
     position: 'absolute',
-    width: 108,
-    height: 108,
+    width: header.pinkOrb.size,
+    height: header.pinkOrb.size,
     borderRadius: radii.pill,
-    right: 28,
-    bottom: -78,
+    right: header.pinkOrb.right,
+    bottom: header.pinkOrb.bottom,
   },
   headerShine: {
     position: 'absolute',
-    height: 1,
-    top: 2,
-    left: 28,
-    right: 28,
+    height: header.shineHeight,
+    top: header.shineTop,
+    left: header.shineInset,
+    right: header.shineInset,
     opacity: 0.76,
   },
   body: {
     flex: 1,
-    paddingHorizontal: spacing.sm,
-    paddingTop: spacing.lg,
+    paddingHorizontal: screen.bodyHorizontalPadding,
+    paddingTop: screen.bodyTopPadding,
   },
   glow: {
     position: 'absolute',
     borderRadius: radii.pill,
   },
   purpleGlow: {
-    width: 300,
-    height: 300,
-    top: 54,
-    right: -156,
+    width: screen.ambientGlow.purple.size,
+    height: screen.ambientGlow.purple.size,
+    top: screen.ambientGlow.purple.top,
+    right: screen.ambientGlow.purple.right,
   },
   pinkGlow: {
-    width: 320,
-    height: 320,
-    bottom: 76,
-    left: -190,
+    width: screen.ambientGlow.pink.size,
+    height: screen.ambientGlow.pink.size,
+    bottom: screen.ambientGlow.pink.bottom,
+    left: screen.ambientGlow.pink.left,
   },
 });
