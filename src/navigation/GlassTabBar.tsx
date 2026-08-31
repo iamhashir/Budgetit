@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   bubbleRim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderWidth: 1,
     borderRadius: 27,
   },
