@@ -1,0 +1,52 @@
+name: Publish Budgetit Android Preview
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-budgetit-preview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.1'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.1.12297006"
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Validate project
+        run: |
+          npx expo-doctor@latest
+          npm run typecheck
+      - name: Generate Android project
+        run: npx expo prebuild --clean --platform android --non-interactive
+      - name: Build Android preview APK
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+      - name: Publish preview release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -f android/app/build/outputs/apk/release/app-release.apk
+          cp android/app/build/outputs/apk/release/app-release.apk Budgetit-v0.1.0-preview.apk
+          gh release create v0.1.0-preview Budgetit-v0.1.0-preview.apk \
+            --target "${GITHUB_SHA}" \
+            --title "Budgetit v0.1.0 Preview (Android)" \
+            --notes "Early UI preview containing Home, Add, and Settings screen shells. Expense tracking and local data storage are not implemented yet. This is a testing build, not a production release." \
+            --prerelease
