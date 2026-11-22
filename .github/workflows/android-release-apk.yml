@@ -21,6 +21,8 @@ jobs:
     name: assembleRelease
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      EXPO_PUBLIC_CONVEX_URL: https://hidden-lark-330.convex.cloud
 
     steps:
       - name: Checkout repository
