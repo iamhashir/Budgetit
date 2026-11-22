@@ -28,7 +28,7 @@ export function ConnectedAddScreen() {
 
   async function save() {
     const input = amount.trim();
-    if (!/^\\d+(\\.\\d{1,2})?$/.test(input)) {
+    if (!/^\d+(\\.\d{1,2})?$/.test(input)) {
       setError('Enter a valid amount with up to two decimals.');
       return;
     }
@@ -37,7 +37,7 @@ export function ConnectedAddScreen() {
       setError('Enter a valid positive amount.');
       return;
     }
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       setError('Enter date as YYYY-MM-DD.');
       return;
     }

@@ -11,7 +11,7 @@ const category = v.union(
 );
 
 function checkDate(input: string) {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(input)) throw new Error('Invalid date');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input)) throw new Error('Invalid date');
   const [year, month, day] = input.split('-').map(Number);
   const d = new Date(Date.UTC(year, month - 1, day));
   if (year < 1900 || d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) {
