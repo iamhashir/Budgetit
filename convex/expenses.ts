@@ -1,5 +1,5 @@
 import { v } from 'convex/values';
-import { mutation, query } from './_generated/server';
+import { mutationGeneric as mutation, queryGeneric as query } from 'convex/server';
 
 const category = v.union(
   v.literal('Food'),
@@ -12,7 +12,7 @@ const category = v.union(
 
 function checkDate(input: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input)) throw new Error('Invalid date');
-  const [year, month, day] = input.split('-').map(Number);
+  const [year = 0, month = 0, day = 0] = input.split('-').map(Number);
   const d = new Date(Date.UTC(year, month - 1, day));
   if (year < 1900 || d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) {
     throw new Error('Invalid date');
@@ -24,7 +24,7 @@ export const list = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error('Sign in required to view expenses');
-    return await ctx.db.query('expenses').withIndex('by_user', q => q.eq('userId', identity.subject)).order('desc').take(50);
+    return await ctx.db.query('expenses').filter(q => q.eq(q.field('userId'), identity.subject)).order('desc').take(50);
   },
 });
 

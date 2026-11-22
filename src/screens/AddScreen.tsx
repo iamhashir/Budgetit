@@ -35,7 +35,7 @@ function todayLocal(): string {
 
 function isValidDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [year, month, day] = value.split('-').map(Number);
+  const [year = 0, month = 0, day = 0] = value.split('-').map(Number);
   const date = new Date(year, month - 1, day);
   return (
     year >= 1900 &&

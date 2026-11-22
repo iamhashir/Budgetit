@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
-import { api } from '../../convex/_generated/api';
+import { makeFunctionReference } from 'convex/server';
+
+type SavedExpense = { _id: string; amountCents: number; category: string; date: string; note: string };
+const listExpenses = makeFunctionReference<'query', Record<string, never>, SavedExpense[]>('expenses:list');
+const addExpense = makeFunctionReference<'mutation', { amountCents: number; category: Category; date: string; note: string }, string>('expenses:add');
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { radii, spacing, useDesignSystem } from '../theme';
@@ -17,8 +21,8 @@ function localDate() {
 export function ConnectedAddScreen() {
   const { colors } = useDesignSystem();
   const { isAuthenticated, isLoading } = useConvexAuth();
-  const expenses = useQuery(api.expenses.list, isAuthenticated ? {} : 'skip');
-  const add = useMutation(api.expenses.add);
+  const expenses = useQuery(listExpenses, isAuthenticated ? {} : 'skip');
+  const add = useMutation(addExpense);
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<Category>('Food');
   const [date, setDate] = useState(localDate);
