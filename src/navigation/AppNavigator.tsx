@@ -1,8 +1,6 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
 import { AddScreen } from '../screens/AddScreen';
-import { ConnectedAddScreen } from '../screens/ConnectedAddScreen';
-import { convexConfigured } from '../convex/ConvexClientProvider';
 import { HomeScreen } from '../screens/HomeScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { GlassTabBar } from './GlassTabBar';
@@ -23,9 +21,7 @@ export function AppNavigator() {
       screenOptions={{
         headerShown: false,
         tabBarHideOnKeyboard: true,
-        sceneStyle: {
-          backgroundColor: 'transparent',
-        },
+        sceneStyle: { backgroundColor: 'transparent' },
       }}
     >
       <Tab.Screen
@@ -35,7 +31,7 @@ export function AppNavigator() {
       />
       <Tab.Screen
         name="Add"
-        component={convexConfigured ? ConnectedAddScreen : AddScreen}
+        component={AddScreen}
         options={{ tabBarAccessibilityLabel: 'Add' }}
       />
       <Tab.Screen
