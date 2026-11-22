@@ -1,6 +1,8 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
 import { AddScreen } from '../screens/AddScreen';
+import { ConnectedAddScreen } from '../screens/ConnectedAddScreen';
+import { convexConfigured } from '../convex/ConvexClientProvider';
 import { HomeScreen } from '../screens/HomeScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { GlassTabBar } from './GlassTabBar';
@@ -33,7 +35,7 @@ export function AppNavigator() {
       />
       <Tab.Screen
         name="Add"
-        component={AddScreen}
+        component={convexConfigured ? ConnectedAddScreen : AddScreen}
         options={{ tabBarAccessibilityLabel: 'Add' }}
       />
       <Tab.Screen
